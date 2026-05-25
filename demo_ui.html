@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MindRift — API Demo</title>
+<style>
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #30363d;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --blue:     #58a6ff;
+    --green:    #3fb950;
+    --yellow:   #d29922;
+    --orange:   #db6d28;
+    --red:      #f85149;
+    --purple:   #bc8cff;
+    --teal:     #39d353;
+    --gold:     #ffd700;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+  /* Header */
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+  .logo span { color: var(--blue); }
+  .badge { background: #1f6feb33; color: var(--blue); border: 1px solid #1f6feb88; border-radius: 20px; padding: 3px 10px; font-size: 12px; }
+  .badge.live { background: #3fb95033; color: var(--green); border-color: #3fb95088; }
+  .ws-status { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+  .dot.off { background: var(--red); animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* Layout */
+  .grid { display: grid; grid-template-columns: 280px 1fr 260px; gap: 16px; padding: 16px 24px; max-width: 1280px; }
+  .col { display: flex; flex-direction: column; gap: 16px; }
+
+  /* Cards */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 14px; }
+
+  /* Game State */
+  .champion-name { font-size: 22px; font-weight: 700; color: var(--text); }
+  .phase-badge { display: inline-block; background: #1f6feb22; color: var(--blue); border: 1px solid #1f6feb55; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; margin-top: 4px; }
+  .phase-badge.mid { background: #d2992222; color: var(--yellow); border-color: #d2992255; }
+  .phase-badge.late { background: #f8514922; color: var(--red); border-color: #f8514955; }
+  .game-time { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); margin: 12px 0 4px; }
+  .game-time-label { font-size: 11px; color: var(--muted); }
+
+  /* HP Bar */
+  .stat-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; margin-top: 12px; display: flex; justify-content: space-between; }
+  .bar-bg { background: #30363d; border-radius: 4px; height: 8px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+  .bar-hp  { background: linear-gradient(90deg, var(--green), #7ee787); }
+  .bar-hp.medium { background: linear-gradient(90deg, var(--yellow), #f0c040); }
+  .bar-hp.low    { background: linear-gradient(90deg, var(--red), #f97583); }
+
+  /* KDA Stats */
+  .stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 12px; }
+  .stat-box { background: #0d111799; border: 1px solid var(--border); border-radius: 6px; padding: 8px; text-align: center; }
+  .stat-num { font-size: 18px; font-weight: 700; }
+  .stat-lbl { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .kill  { color: var(--green); }
+  .death { color: var(--red); }
+  .assist{ color: var(--blue); }
+
+  .gold-row { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+  .gold-icon { color: var(--gold); font-size: 14px; }
+  .gold-val { font-size: 15px; font-weight: 600; }
+  .cs-val { margin-left: auto; font-size: 13px; color: var(--muted); }
+  .cs-val span { color: var(--text); font-weight: 600; }
+
+  /* Signals */
+  .signal-list { display: flex; flex-direction: column; gap: 8px; }
+  .signal-item { border-radius: 6px; padding: 10px 12px; border-left: 3px solid; background: #0d111799; }
+  .signal-item.sev-9,.signal-item.sev-10 { border-color: var(--red); background: #f8514911; }
+  .signal-item.sev-7,.signal-item.sev-8  { border-color: var(--orange); background: #db6d2811; }
+  .signal-item.sev-5,.signal-item.sev-6  { border-color: var(--yellow); background: #d2992211; }
+  .signal-item.sev-3,.signal-item.sev-4  { border-color: var(--blue); background: #58a6ff11; }
+  .signal-item.sev-1,.signal-item.sev-2  { border-color: var(--muted); }
+  .signal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .signal-type { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+  .signal-intent { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: #30363d; color: var(--text); }
+  .intent-ward { background: #1f6feb33; color: var(--blue); }
+  .intent-safe { background: #f8514933; color: var(--red); }
+  .intent-roam { background: #3fb95033; color: var(--green); }
+  .intent-obj  { background: #d2992233; color: var(--yellow); }
+  .intent-push { background: #bc8cff33; color: var(--purple); }
+  .signal-msg { font-size: 13px; line-height: 1.5; color: var(--text); }
+  .signal-time { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .sev-badge { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px; }
+
+  /* Objectives */
+  .obj-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .obj-item:last-child { border-bottom: none; }
+  .obj-icon { font-size: 22px; width: 30px; text-align: center; }
+  .obj-name { font-size: 13px; font-weight: 600; }
+  .obj-timer { margin-left: auto; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .obj-timer.urgent { color: var(--red); }
+  .obj-timer.soon   { color: var(--yellow); }
+  .obj-timer.ok     { color: var(--green); }
+  .obj-timer.none   { color: var(--muted); font-size: 12px; font-weight: 400; }
+
+  /* Missing enemies */
+  .enemy-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .enemy-item:last-child { border-bottom: none; }
+  .enemy-champ { font-size: 13px; font-weight: 600; }
+  .enemy-since { font-size: 12px; color: var(--muted); }
+  .enemy-time { margin-left: auto; font-size: 13px; font-weight: 700; }
+  .enemy-time.warn { color: var(--orange); }
+  .enemy-time.danger { color: var(--red); }
+
+  /* Profile */
+  .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .profile-stat { background: #0d111799; border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+  .profile-num { font-size: 20px; font-weight: 700; color: var(--blue); }
+  .profile-lbl { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .weakness-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .weakness-tag { background: #f8514922; color: var(--red); border: 1px solid #f8514955; border-radius: 12px; padding: 2px 8px; font-size: 11px; }
+  .cause-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .cause-item:last-child { border-bottom: none; }
+  .cause-count { color: var(--red); font-weight: 700; }
+  .trend { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 7px; border-radius: 10px; margin-top: 8px; }
+  .trend.up   { background: #3fb95022; color: var(--green); }
+  .trend.down { background: #f8514922; color: var(--red); }
+  .trend.same { background: #30363d; color: var(--muted); }
+
+  /* WS log */
+  .ws-log { background: #0d1117; border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-family: 'Consolas', monospace; font-size: 11px; height: 80px; overflow-y: auto; color: var(--muted); }
+  .ws-event { color: var(--green); }
+
+  /* Tabs (signals) */
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .tab { padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; border: 1px solid transparent; color: var(--muted); }
+  .tab.active { background: #1f6feb22; color: var(--blue); border-color: #1f6feb55; }
+
+  .endpoint-pill { display: inline-block; background: #30363d; color: var(--muted); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-family: monospace; margin: 2px 2px 2px 0; }
+  .method { font-weight: 700; margin-right: 4px; }
+  .method.get { color: var(--green); }
+  .method.ws  { color: var(--purple); }
+
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">Mind<span>Rift</span> <small style="font-weight:400;color:var(--muted);font-size:13px;">API Demo</small></div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="ws-status">
+      <div class="dot" id="wsDot"></div>
+      <span id="wsLabel">Conectando ao WebSocket...</span>
+    </div>
+    <div class="badge" id="modeBadge">DEMO</div>
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- COL 1: Game State + Objectives + Missing -->
+  <div class="col">
+
+    <div class="card">
+      <div class="card-title">Estado do Jogo <code class="endpoint-pill"><span class="method get">GET</span>/game</code></div>
+      <div class="champion-name" id="champName">Jinx</div>
+      <div class="phase-badge mid" id="phaseBadge">MID GAME</div>
+      <div class="game-time" id="gameTime">14:07</div>
+      <div class="game-time-label">Tempo de jogo</div>
+
+      <div class="stat-label">
+        <span>HP</span>
+        <span id="hpText">1240 / 1850</span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill bar-hp medium" id="hpBar" style="width:67%"></div></div>
+
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-num kill" id="kills">4</div><div class="stat-lbl">Kills</div></div>
+        <div class="stat-box"><div class="stat-num death" id="deaths">1</div><div class="stat-lbl">Deaths</div></div>
+        <div class="stat-box"><div class="stat-num assist" id="assists">3</div><div class="stat-lbl">Assists</div></div>
+      </div>
+      <div class="gold-row">
+        <span class="gold-icon">◈</span>
+        <span class="gold-val" id="gold">3.200g</span>
+        <span class="cs-val">CS: <span id="cs">112</span> (<span id="cspm">7.9</span>/min)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Objectives <code class="endpoint-pill"><span class="method get">GET</span>/objectives</code></div>
+      <div id="objList">
+        <div class="obj-item">
+          <div class="obj-icon">🐉</div>
+          <div><div class="obj-name">Dragon</div></div>
+          <div class="obj-timer urgent" id="dragonTimer">00:47</div>
+        </div>
+        <div class="obj-item">
+          <div class="obj-icon">💀</div>
+          <div><div class="obj-name">Baron</div></div>
+          <div class="obj-timer none">Não disponível</div>
+        </div>
+        <div class="obj-item">
+          <div class="obj-icon">🏔️</div>
+          <div><div class="obj-name">Arauto</div></div>
+          <div class="obj-timer none">Não disponível</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Inimigos Sumidos <code class="endpoint-pill"><span class="method get">GET</span>/enemies</code></div>
+      <div id="missingList">
+        <div class="enemy-item">
+          <div>
+            <div class="enemy-champ">Zed</div>
+            <div class="enemy-since">Visto por último: mid lane</div>
+          </div>
+          <div class="enemy-time warn">12s</div>
+        </div>
+        <div class="enemy-item">
+          <div>
+            <div class="enemy-champ">Lee Sin</div>
+            <div class="enemy-since">Visto por último: jungle top</div>
+          </div>
+          <div class="enemy-time danger">28s</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- COL 2: Signals (main) -->
+  <div class="col">
+
+    <div class="card">
+      <div class="card-title">
+        Sinais de Coaching em Tempo Real
+        <code class="endpoint-pill"><span class="method get">GET</span>/signals</code>
+        <code class="endpoint-pill"><span class="method ws">WS</span>/ws</code>
+      </div>
+      <div class="tabs">
+        <div class="tab active">Todos</div>
+        <div class="tab">Críticos</div>
+        <div class="tab">Mapa</div>
+        <div class="tab">Farm</div>
+      </div>
+      <div class="signal-list" id="signalList">
+
+        <div class="signal-item sev-6">
+          <div class="signal-header">
+            <span class="signal-type">vision_ward_timing</span>
+            <span class="signal-intent intent-ward">WARD</span>
+          </div>
+          <div class="signal-msg">Faz 8 minutos — hora de rewardar a jungle. Dragon spawn em 47s.</div>
+          <div class="signal-time">14:05 · vision_engine · severidade 6</div>
+        </div>
+
+        <div class="signal-item sev-4">
+          <div class="signal-header">
+            <span class="signal-type">matchup_phase_tip</span>
+            <span class="signal-intent intent-safe">PLAY_SAFE</span>
+          </div>
+          <div class="signal-msg">Matchup vs Zed: no mid game, fique atrás do tank. Zed não pode matar o que não pode alcançar.</div>
+          <div class="signal-time">13:30 · matchup_engine · severidade 4</div>
+        </div>
+
+        <div class="signal-item sev-5">
+          <div class="signal-header">
+            <span class="signal-type">fundamental_mid_game</span>
+            <span class="signal-intent intent-roam">ROAM</span>
+          </div>
+          <div class="signal-msg">CS: 7.9/min. Rotaciona pelas side lanes entre objectives — não fique parado esperando o time.</div>
+          <div class="signal-time">13:00 · fundamentals_engine · severidade 5</div>
+        </div>
+
+        <div class="signal-item sev-6">
+          <div class="signal-header">
+            <span class="signal-type">comp_warning</span>
+            <span class="signal-intent intent-safe">PLAY_SAFE</span>
+          </div>
+          <div class="signal-msg">Comp assassin — cheque flancos antes de ir ao Dragon. Uma morte aqui perde o objetivo.</div>
+          <div class="signal-time">12:15 · composition_engine · severidade 6</div>
+        </div>
+
+        <div class="signal-item sev-5">
+          <div class="signal-header">
+            <span class="signal-type">enemy_recall_window</span>
+            <span class="signal-intent intent-push">PUSH_WAVE</span>
+          </div>
+          <div class="signal-msg">Zed sumiu há 12s — provável recall. Empurra a wave e reseta antes que ele volte.</div>
+          <div class="signal-time">11:45 · recall_tracker_engine · severidade 5</div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">WebSocket — Payload de exemplo</div>
+      <div class="ws-log" id="wsLog">
+        <div>// Aguardando eventos do WebSocket em ws://localhost:8000/ws</div>
+        <div>// Atualiza a cada 1 segundo com estado completo do jogo</div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--muted);">
+        Estrutura: <code style="color:var(--blue)">{ event, timestamp, game, signals[], objectives, missing[] }</code>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Endpoints disponíveis</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;">
+        <div><code class="endpoint-pill"><span class="method get">GET</span>/game</code> — estado completo do jogo</div>
+        <div><code class="endpoint-pill"><span class="method get">GET</span>/signals?limit=10</code> — coaching recente</div>
+        <div><code class="endpoint-pill"><span class="method get">GET</span>/profile</code> — histórico do jogador</div>
+        <div><code class="endpoint-pill"><span class="method get">GET</span>/objectives</code> — timers Dragon/Baron/Herald</div>
+        <div><code class="endpoint-pill"><span class="method get">GET</span>/enemies</code> — inimigos sumidos</div>
+        <div><code class="endpoint-pill"><span class="method ws">WS</span>/ws</code> — stream em tempo real</div>
+        <div><code class="endpoint-pill"><span class="method get">GET</span>/docs</code> — Swagger UI interativo</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- COL 3: Player Profile -->
+  <div class="col">
+
+    <div class="card">
+      <div class="card-title">Perfil do Jogador <code class="endpoint-pill"><span class="method get">GET</span>/profile</code></div>
+      <div class="profile-grid">
+        <div class="profile-stat">
+          <div class="profile-num" id="csAvg">6.8</div>
+          <div class="profile-lbl">CS/min médio</div>
+          <div class="trend up" id="csTrend">↑ melhorando</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-num" style="color:var(--red)" id="deathAvg">4.2</div>
+          <div class="profile-lbl">Mortes/jogo</div>
+          <div class="trend same" id="deathTrend">→ estável</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-num" style="color:var(--muted)" id="pctDead">12.3%</div>
+          <div class="profile-lbl">Tempo morto</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-num" style="color:var(--text)" id="totalGames">23</div>
+          <div class="profile-lbl">Partidas</div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div class="card-title">Campeão mais jogado</div>
+        <div style="font-size:15px;font-weight:700;" id="mostPlayed">Jinx</div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div class="card-title">Principais causas de morte (histórico)</div>
+        <div id="causeList">
+          <div class="cause-item"><span>Isolamento</span><span class="cause-count">14x</span></div>
+          <div class="cause-item"><span>Fog of War</span><span class="cause-count">8x</span></div>
+          <div class="cause-item"><span>HP baixo em fight</span><span class="cause-count">6x</span></div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <div class="card-title">Fraquezas identificadas</div>
+        <div class="weakness-list" id="weaknessList">
+          <span class="weakness-tag">farm_consistencia</span>
+          <span class="weakness-tag">morte_excessiva</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Como integrar</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.8;">
+        <b style="color:var(--text);">1. Instalar dependências:</b><br>
+        <code style="color:var(--blue);">pip install fastapi uvicorn</code><br><br>
+        <b style="color:var(--text);">2. Rodar servidor (demo):</b><br>
+        <code style="color:var(--blue);">python mindrift_api_server.py</code><br><br>
+        <b style="color:var(--text);">3. Integrar ao jogo (main.py):</b><br>
+        <code style="color:var(--blue);">from mindrift_api_server import launch_api_thread, set_context<br>set_context(ctx)<br>launch_api_thread()</code><br><br>
+        <b style="color:var(--text);">WebSocket (JS):</b><br>
+        <code style="color:var(--green);">const ws = new WebSocket('ws://localhost:8000/ws')<br>ws.onmessage = e => console.log(JSON.parse(e.data))</code>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Atualiza timer do dragon ─────────────────────────────────────────────
+let dragonSecs = 47;
+setInterval(() => {
+  dragonSecs = Math.max(0, dragonSecs - 1);
+  const m = String(Math.floor(dragonSecs / 60)).padStart(2,'0');
+  const s = String(dragonSecs % 60).padStart(2,'0');
+  const el = document.getElementById('dragonTimer');
+  el.textContent = `${m}:${s}`;
+  el.className = 'obj-timer ' + (dragonSecs <= 15 ? 'urgent' : dragonSecs <= 45 ? 'soon' : 'ok');
+}, 1000);
+
+// ── WebSocket (conecta ao servidor real se disponível) ───────────────────
+function connectWS() {
+  const host = window.location.hostname || 'localhost';
+  const ws = new WebSocket(`ws://${host}:8000/ws`);
+  const dot   = document.getElementById('wsDot');
+  const label = document.getElementById('wsLabel');
+  const log   = document.getElementById('wsLog');
+  const badge = document.getElementById('modeBadge');
+
+  ws.onopen = () => {
+    dot.classList.remove('off');
+    label.textContent = 'WebSocket conectado — dados ao vivo';
+    badge.textContent = 'LIVE';
+    badge.classList.add('live');
+  };
+
+  ws.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    const ts = new Date().toLocaleTimeString('pt-BR');
+    const entry = document.createElement('div');
+    entry.innerHTML = `<span class="ws-event">[${ts}]</span> event: ${data.event} · ${Object.keys(data).join(', ')}`;
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+    if (log.children.length > 20) log.removeChild(log.firstChild);
+
+    // Atualiza UI com dados reais se estiver no modo live
+    if (data.game && data.game.mode === 'live') {
+      updateFromLive(data);
+    }
+  };
+
+  ws.onerror = () => {
+    dot.classList.add('off');
+    label.textContent = 'Sem servidor — modo demo (dados mockados)';
+  };
+
+  ws.onclose = () => {
+    dot.classList.add('off');
+    label.textContent = 'WebSocket desconectado';
+    setTimeout(connectWS, 5000);
+  };
+}
+
+function updateFromLive(data) {
+  const g = data.game;
+  if (!g) return;
+  document.getElementById('champName').textContent = g.champion || '—';
+  document.getElementById('gameTime').textContent  = g.game_time_display || '00:00';
+  const p = g.player || {};
+  document.getElementById('kills').textContent   = p.kills   ?? '—';
+  document.getElementById('deaths').textContent  = p.deaths  ?? '—';
+  document.getElementById('assists').textContent = p.assists ?? '—';
+  document.getElementById('gold').textContent    = `${(p.gold||0).toLocaleString('pt-BR')}g`;
+  document.getElementById('cs').textContent      = p.cs ?? '—';
+  document.getElementById('cspm').textContent    = p.cs_per_min ?? '—';
+  const hpPct = (p.hp_pct || 0) * 100;
+  document.getElementById('hpBar').style.width = hpPct + '%';
+  document.getElementById('hpText').textContent = `${p.hp|0} / ${p.max_hp|0}`;
+}
+
+connectWS();
+</script>
+</body>
+</html>
